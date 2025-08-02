@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  full-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: full-node
+    depends_on:
+      couchbase:
+        condition: service_healthy
+    environment:
+      - NODE_TYPE=full
+      - COUCHBASE_HOST=couchbase
+    networks:
+      - blockchain-net
+
+  light-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: light-node
+    depends_on:
+      couchbase:
+        condition: service_healthy
+    environment:
+      - NODE_TYPE=light
+      - COUCHBASE_HOST=couchbase
+    networks:
+      - blockchain-net
+
+volumes:
+  couchbase_data:
+
+networks:
+  blockchain-net:
+    driver: bridge
