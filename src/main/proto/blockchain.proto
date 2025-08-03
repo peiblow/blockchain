@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+option java_package = "org.veoow.grpc";
+option java_multiple_files = true;
+
+service BlockchainService {
+  rpc GetBlockHeaders (Empty) returns (BlockHeaders);
+  rpc GetPendingTransactions (Empty) returns (Transactions);
+  rpc SubmitMinedBlock (Block) returns (BlockValidationResponse);
+  rpc AddTransaction (Transaction) returns (TransactionResponse);
+  rpc GetMempool(Empty) returns (MempoolResponse);
+}
+
+message Empty {}
+
+message BlockHeader {
+  string hash = 1;
+  string previousHash = 2;
+  int64 timestamp = 3;
+  int32 nonce = 4;
+}
+
+message BlockHeaders {
+  repeated BlockHeader headers = 1;
+}
+
+message Transaction {
+  string transactionId = 1;
+  string from = 2;
+  string to = 3;
+  double amount = 4;
+  string signature = 5;
+}
+
+message Transactions {
+  repeated Transaction transactions = 1;
+}
+
+message Block {
+  string previousHash = 1;
+  repeated Transaction transactions = 2;
+  int32 difficulty = 3;
+  string hash = 4;
+  int32 nonce = 5;
+  int64 timestamp = 6;
+}
+
+// Response Schema
+
+message BlockValidationResponse {
+  bool valid = 1;
+  string message = 2;
+}
+
+message TransactionResponse {
+  bool accepted = 1;
+  string message = 2;
+}
+
+message MempoolResponse {
+  repeated Transaction transactions = 1;
+}

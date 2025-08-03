@@ -1,36 +1,30 @@
-version: '3.8'
-
 services:
-  full-node:
+  full-node-a:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: full-node
-    depends_on:
-      couchbase:
-        condition: service_healthy
-    environment:
-      - NODE_TYPE=full
-      - COUCHBASE_HOST=couchbase
+      dockerfile: Dockerfile.full
+    container_name: full-node-a
+    volumes:
+      - fullnode_data:/data
+    ports:
+      - "9090:9090"
     networks:
       - blockchain-net
 
-  light-node:
+  full-node-b:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: light-node
-    depends_on:
-      couchbase:
-        condition: service_healthy
-    environment:
-      - NODE_TYPE=light
-      - COUCHBASE_HOST=couchbase
+      dockerfile: Dockerfile.full
+    container_name: full-node-b
+    volumes:
+      - fullnode_data:/data
+    ports:
+      - "9091:9090"
     networks:
       - blockchain-net
 
 volumes:
-  couchbase_data:
+  fullnode_data:
 
 networks:
   blockchain-net:
