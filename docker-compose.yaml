@@ -5,9 +5,11 @@ services:
       dockerfile: Dockerfile.full
     container_name: full-node-a
     volumes:
-      - fullnode_data:/data
+      - fullnode_a_data:/data
     ports:
       - "9090:9090"
+    depends_on:
+      - bootstrap
     networks:
       - blockchain-net
 
@@ -17,14 +19,27 @@ services:
       dockerfile: Dockerfile.full
     container_name: full-node-b
     volumes:
-      - fullnode_data:/data
+      - fullnode_b_data:/data
     ports:
       - "9091:9090"
+    depends_on:
+      - bootstrap
+    networks:
+      - blockchain-net
+
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.bootstrap
+    container_name: bootstrap-node
+    ports:
+      - "50051:50051"
     networks:
       - blockchain-net
 
 volumes:
-  fullnode_data:
+  fullnode_a_data:
+  fullnode_b_data:
 
 networks:
   blockchain-net:

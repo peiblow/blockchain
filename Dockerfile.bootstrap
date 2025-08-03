@@ -1,0 +1,8 @@
+# Dockerfile
+FROM eclipse-temurin:17-jdk-alpine
+
+WORKDIR /app
+
+COPY bootstrap-node/target/bootstrap-node-1.0-SNAPSHOT.jar bootstrap.jar
+
+CMD ["java", "-jar", "bootstrap.jar"]

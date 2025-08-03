@@ -3,6 +3,6 @@ FROM eclipse-temurin:17-jdk-alpine
 
 WORKDIR /app
 
-COPY target/blockchain-1.0-SNAPSHOT.jar app.jar
+COPY blockchain-core/target/blockchain-core-1.0-SNAPSHOT.jar light.jar
 
-CMD ["java", "-jar", "app.jar", "light"]
+CMD ["java", "-jar", "light.jar", "light"]
