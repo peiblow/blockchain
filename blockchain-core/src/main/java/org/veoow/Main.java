@@ -123,6 +123,8 @@ public class Main {
       lightNode.syncHeadersFromGrpc(response);
       lightNode.syncMemPool(mempool);
 
+      lightNode.mineMempool(host, port, 4);
+
       Thread.currentThread().join();
 
     } catch (InterruptedException e) {

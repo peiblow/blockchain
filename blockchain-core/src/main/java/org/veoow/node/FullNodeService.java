@@ -1,5 +1,7 @@
 package org.veoow.node;
 
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import lombok.Getter;
 import org.veoow.config.BlockchainDatabase;
@@ -15,7 +17,7 @@ import java.util.stream.Collectors;
 @Getter
 public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImplBase {
   private final BlockchainDatabase db;
-  private final Queue<org.veoow.grpc.Transaction> mempool = new ConcurrentLinkedQueue<>();
+  private final Queue<Transaction> mempool = new ConcurrentLinkedQueue<>();
   private final int difficulty = 4;
 
   public FullNodeService(BlockchainDatabase db) throws Exception {
@@ -35,8 +37,15 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
   }
 
   public void addTransaction(org.veoow.grpc.Transaction request, StreamObserver<TransactionResponse> responseObserver) {
-    mempool.add(request);
-    System.out.println("Transaction added at mempool: " + request.getTransactionId());
+    Transaction newTransactionBlock = new Transaction(
+          request.getFrom(),
+          request.getTo(),
+          BigDecimal.valueOf(request.getAmount()),
+          request.getSignature()
+    );
+
+    mempool.add(newTransactionBlock);
+    System.out.println("Transaction added at mempool: " + newTransactionBlock.getTransactionId());
 
     TransactionResponse response = TransactionResponse.newBuilder()
             .setAccepted(true)
@@ -49,7 +58,11 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
 
   public void getMempool(Empty request, StreamObserver<MempoolResponse> responseObserver) {
     MempoolResponse.Builder responseBuilder = MempoolResponse.newBuilder();
-    responseBuilder.addAllTransactions(mempool);
+    responseBuilder.addAllTransactions(
+          mempool.stream()
+                .map(this::convertToGrpcTransaction)
+                .collect(Collectors.toList())
+    );
     responseObserver.onNext(responseBuilder.build());
     responseObserver.onCompleted();
   }
@@ -64,12 +77,6 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
       } else {
         System.out.println("❌ Bloco inválido.");
       }
-  }
-
-  public boolean isValidNewBlock(Block newBlock, Block lastBlock) {
-    String target = "0".repeat(newBlock.getDifficulty());
-    return newBlock.getHash().startsWith(target) &&
-          newBlock.getPreviousHash().equals(lastBlock.getHash());
   }
 
   public Block getBlockByHash(String hash) throws Exception {
@@ -101,30 +108,40 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
     }
   }
 
-  public BlockValidationResponse submitMinedBlock(org.veoow.grpc.Block grpcBlock) throws Exception {
-    Block newBlock = convertFromGrpcBlock(grpcBlock);
-    Block lastBlock = db.getLastBlock();
+  public void submitMinedBlock(org.veoow.grpc.Block request, StreamObserver<BlockValidationResponse> responseObserver) {
+    try {
+      Block newBlock = convertFromGrpcBlock(request);
+      Block lastBlock = db.getLastBlock();
 
-    if (!isValidNewBlock(newBlock, lastBlock)) {
-      return BlockValidationResponse.newBuilder()
+      if (!isValidNewBlock(newBlock, lastBlock)) {
+        responseObserver.onNext(BlockValidationResponse.newBuilder()
               .setValid(false)
               .setMessage("Invalid Block, now you'll be penalized :(")
-              .build();
-    }
+              .build());
+        responseObserver.onCompleted();
+        return;
+      }
 
-    try {
       db.saveBlock(newBlock);
-      mempool.removeAll(newBlock.getTransactions());
-      return BlockValidationResponse.newBuilder()
-              .setValid(true)
-              .setMessage("Bloco aceito e salvo")
-              .build();
+      this.mempool.removeAll(newBlock.getTransactions());
+
+      propagateBlockToTrustedPeers(request);
+
+      responseObserver.onNext(BlockValidationResponse.newBuilder()
+            .setValid(true)
+            .setMessage("Bloco aceito, salvo e propagado")
+            .build());
+      responseObserver.onCompleted();
+
     } catch (Exception e) {
-      return BlockValidationResponse.newBuilder()
-              .setValid(false)
-              .setMessage("Erro ao salvar bloco: " + e.getMessage())
-              .build();
+      responseObserver.onError(e);
     }
+  }
+
+  public boolean isValidNewBlock(Block newBlock, Block lastBlock) {
+    String target = "0".repeat(newBlock.getDifficulty());
+    return newBlock.getHash().startsWith(target) &&
+          newBlock.getPreviousHash().equals(lastBlock.getHash());
   }
 
   private Block createGenesisBlock() {
@@ -141,19 +158,19 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
             grpcBlock.getPreviousHash(),
             transactions,
             grpcBlock.getTimestamp(),
-            grpcBlock.getDifficulty(),
-            grpcBlock.getNonce()
+            grpcBlock.getNonce(),
+            grpcBlock.getDifficulty()
     );
   }
 
   private Transaction convertFromGrpcTransaction(org.veoow.grpc.Transaction grpcTx) {
     byte[] signatureBytes = Base64.getDecoder().decode(grpcTx.getSignature());
     return new Transaction(
-            grpcTx.getTransactionId(),
-            grpcTx.getFrom(),
-            grpcTx.getTo(),
-            BigDecimal.valueOf(grpcTx.getAmount()),
-            signatureBytes
+          grpcTx.getTransactionId(),
+          grpcTx.getFrom(),
+          grpcTx.getTo(),
+          BigDecimal.valueOf(grpcTx.getAmount()),
+          signatureBytes
     );
   }
 
@@ -165,5 +182,51 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
             .setAmount(tx.getAmount().doubleValue())
             .setSignature(Base64.getEncoder().encodeToString(tx.getSignature()))
             .build();
+  }
+
+  private void propagateBlockToTrustedPeers(org.veoow.grpc.Block block) {
+    ManagedChannel bootstrapChannel = ManagedChannelBuilder
+          .forAddress("localhost", 50051)
+          .usePlaintext()
+          .build();
+
+    BootstrapServiceGrpc.BootstrapServiceBlockingStub bootstrapStub =
+          BootstrapServiceGrpc.newBlockingStub(bootstrapChannel);
+
+    PeerList peerList = bootstrapStub.getPeerList(Empty.newBuilder().build());
+    List<NodeInfo> trustedPeers = peerList.getPeersList();
+
+    bootstrapChannel.shutdown();
+
+    for (NodeInfo peer : trustedPeers) {
+      try {
+        String[] hostPort = peer.getAddress().split(":");
+        String host = hostPort[0];
+        int port = Integer.parseInt(hostPort[1]);
+
+        ManagedChannel channel = ManagedChannelBuilder
+              .forAddress(host, port)
+              .usePlaintext()
+              .build();
+
+        BlockchainServiceGrpc.BlockchainServiceBlockingStub stub =
+              BlockchainServiceGrpc.newBlockingStub(channel);
+
+        if (!isMyself(host, port)) {
+          stub.submitMinedBlock(block);
+          System.out.println("✅ Bloco propagado para peer " + peer.getAddress());
+        }
+
+        channel.shutdown();
+
+      } catch (Exception e) {
+        System.err.println("❌ Falha ao propagar para " + peer.getAddress() + ": " + e.getMessage());
+      }
+    }
+  }
+
+  private boolean isMyself(String host, int port) {
+    // Exemplo simples, você pode melhorar com IP real ou hostname da VVM
+    return host.equals("localhost") && port == 9090;
   }
 }
