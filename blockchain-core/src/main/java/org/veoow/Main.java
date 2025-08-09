@@ -115,7 +115,7 @@ public class Main {
 
       BlockchainServiceGrpc.BlockchainServiceBlockingStub stub = BlockchainServiceGrpc.newBlockingStub(channel);
 
-      System.out.println("LightNode sincronizando com o peer: " + peer.getId());
+      System.out.println("🔄 LightNode syncing with peer: " + peer.getId());
 
       var response = stub.getBlockHeaders(Empty.newBuilder().build());
       var mempool = stub.getMempool(Empty.newBuilder().build());

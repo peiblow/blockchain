@@ -127,6 +127,8 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
         mempool.removeIf(tx -> tx.getTransactionId().equals(transaction.getTransactionId()));
       });
 
+      System.out.println("📤 New block added in the Blockchain: " + getBlockByHash(newBlock.getHash()));
+
       propagateBlockToTrustedPeers(request);
 
       responseObserver.onNext(BlockValidationResponse.newBuilder()
@@ -224,19 +226,18 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
 
         if (!isMyself(host, port)) {
           stub.submitMinedBlock(block);
-          System.out.println("✅ Bloco propagado para peer " + peer.getAddress());
+          System.out.println("✅ Block propagated for peer " + peer.getAddress());
         }
 
         channel.shutdown();
 
       } catch (Exception e) {
-        System.err.println("❌ Falha ao propagar para " + peer.getAddress() + ": " + e.getMessage());
+        System.err.println("❌ Failed in propagate for peer: " + peer.getAddress() + ": " + e.getMessage());
       }
     }
   }
 
   private boolean isMyself(String host, int port) {
-    // Exemplo simples, você pode melhorar com IP real ou hostname da VVM
     return host.equals("localhost") && port == 9090;
   }
 }
