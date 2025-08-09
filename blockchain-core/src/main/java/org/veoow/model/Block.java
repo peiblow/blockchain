@@ -42,7 +42,7 @@ public class Block {
       hash = calculateHash();
     }
 
-    System.out.println("⛏️ Bloco minerado com sucesso! Hash: " + hash);
+    System.out.println("⛏️ Block mined with success! Hash: " + hash);
   }
 
   public String getBlockHeader() {

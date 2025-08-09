@@ -7,7 +7,7 @@ import java.security.NoSuchAlgorithmException;
 public class HashGenerator {
   public static String generateSha256Key(String data, String lastHash) {
     try {
-      String input = data + lastHash;
+      String input = lastHash + data;
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
       byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
       StringBuilder hexString = new StringBuilder();

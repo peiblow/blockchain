@@ -73,9 +73,9 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
 
       if (isValidNewBlock(newBlock, lastBlock)) {
         db.saveBlock(newBlock);
-        System.out.println("✅ Bloco adicionado à blockchain!");
+        System.out.println("✅ New block added in the Blockchain!");
       } else {
-        System.out.println("❌ Bloco inválido.");
+        System.out.println("❌ Invalid Block.");
       }
   }
 
@@ -123,13 +123,15 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
       }
 
       db.saveBlock(newBlock);
-      this.mempool.removeAll(newBlock.getTransactions());
+      newBlock.getTransactions().forEach(transaction -> {
+        mempool.removeIf(tx -> tx.getTransactionId().equals(transaction.getTransactionId()));
+      });
 
       propagateBlockToTrustedPeers(request);
 
       responseObserver.onNext(BlockValidationResponse.newBuilder()
             .setValid(true)
-            .setMessage("Bloco aceito, salvo e propagado")
+            .setMessage("Block accepted, saved and propagated!")
             .build());
       responseObserver.onCompleted();
 
@@ -140,6 +142,14 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
 
   public boolean isValidNewBlock(Block newBlock, Block lastBlock) {
     String target = "0".repeat(newBlock.getDifficulty());
+
+    if (newBlock.getHash().startsWith(target)
+            && !newBlock.getPreviousHash().equals(lastBlock.getHash())
+    ) {
+      System.out.println("This is an ORPHAN block");
+      return false;
+    }
+
     return newBlock.getHash().startsWith(target) &&
           newBlock.getPreviousHash().equals(lastBlock.getHash());
   }

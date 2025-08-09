@@ -3,9 +3,7 @@ package org.veoow.node;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import lombok.Getter;
-import org.veoow.grpc.BlockHeaders;
-import org.veoow.grpc.BlockchainServiceGrpc;
-import org.veoow.grpc.MempoolResponse;
+import org.veoow.grpc.*;
 import org.veoow.model.Block;
 import org.veoow.model.Transaction;
 import org.veoow.node.dto.BlockHeader;
@@ -13,6 +11,7 @@ import org.veoow.node.dto.BlockHeader;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -30,7 +29,7 @@ public class LightNodeService {
   public void syncMemPool(MempoolResponse grpcMemPool) {
     this.knowMemPool = grpcMemPool.getTransactionsList().stream()
             .map(pbTransaction -> {
-              String fakeSig = Base64.getEncoder().encodeToString("fake-signature".getBytes());
+              String fakeSig = Base64.getEncoder().encodeToString("sig".getBytes());
               byte[] signatureBytes = Base64.getDecoder().decode(fakeSig);
               return new Transaction(
                       pbTransaction.getTransactionId(),
@@ -55,6 +54,7 @@ public class LightNodeService {
                     pbHeader.getTimestamp(),
                     pbHeader.getNonce()
             ))
+            .sorted(Comparator.comparingLong(BlockHeader::timestamp))
             .collect(Collectors.toList());
 
     System.out.println("🔄 Light Node sync headers (via gRPC).");
@@ -84,29 +84,37 @@ public class LightNodeService {
     }
 
     try {
-      String previousHash = knownBlockHeaders.get(0).hash();
+      while (!knowMemPool.isEmpty()) {
+        String previousHash = knownBlockHeaders.get(knownBlockHeaders.size() - 1).hash();
+        Transaction tx = knowMemPool.get(0);
+        Block block = new Block(previousHash, List.of(tx), difficulty);
+        System.out.println("⛏️ Mining...");
+        block.mineBlock();
+        System.out.println("✅ Block Mined: " + block.getHash());
 
-      Block block = new Block(previousHash, knowMemPool, difficulty);
-      System.out.println("⛏️ Mining...");
-      block.mineBlock();
-      System.out.println("✅ Block Mined: " + block.getHash());
+        ManagedChannel channel = ManagedChannelBuilder
+                .forAddress(fullNodeHost, fullNodePort)
+                .usePlaintext()
+                .build();
 
-      ManagedChannel channel = ManagedChannelBuilder
-            .forAddress(fullNodeHost, fullNodePort)
-            .usePlaintext()
-            .build();
+        BlockchainServiceGrpc.BlockchainServiceBlockingStub stub =
+                BlockchainServiceGrpc.newBlockingStub(channel);
 
-      BlockchainServiceGrpc.BlockchainServiceBlockingStub stub =
-            BlockchainServiceGrpc.newBlockingStub(channel);
+        org.veoow.grpc.Block grpcBlock = convertToGrpcBlock(block);
+        BlockValidationResponse response = stub.submitMinedBlock(grpcBlock);
 
-      org.veoow.grpc.Block grpcBlock = convertToGrpcBlock(block);
-      var response = stub.submitMinedBlock(grpcBlock);
-      System.out.println("📤 Block sent to the FullNode → " + response.getMessage());
+        System.out.println("📤 Block sent to the FullNode → " + response.getMessage());
 
-      this.knowMemPool.removeAll(block.getTransactions());
+        if (response.getValid()) {
+          var blockHeaders = stub.getBlockHeaders(Empty.newBuilder().build());
+          var mempool = stub.getMempool(Empty.newBuilder().build());
 
-      channel.shutdown();
+          syncHeadersFromGrpc(blockHeaders);
+          syncMemPool(mempool);
+        }
 
+        channel.shutdown();
+      }
     } catch (Exception e) {
       e.printStackTrace();
     }
