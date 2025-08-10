@@ -43,6 +43,7 @@ message Block {
   string hash = 4;
   int32 nonce = 5;
   int64 timestamp = 6;
+  int64 miningTimeMs = 7;
 }
 
 // Response Schema

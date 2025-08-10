@@ -34,7 +34,8 @@ public class Block {
     return HashGenerator.generateSha256Key(data, previousHash);
   }
 
-  public void mineBlock() {
+  public long mineBlock() {
+    long startTime = System.currentTimeMillis();
     String target = new String(new char[difficulty]).replace('\0', '0');
 
     while (!hash.substring(0, difficulty).equals(target)) {
@@ -43,6 +44,7 @@ public class Block {
     }
 
     System.out.println("⛏️ Block mined with success! Hash: " + hash);
+    return System.currentTimeMillis() - startTime;
   }
 
   public String getBlockHeader() {

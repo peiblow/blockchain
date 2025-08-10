@@ -18,7 +18,10 @@ import java.util.stream.Collectors;
 public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImplBase {
   private final BlockchainDatabase db;
   private final Queue<Transaction> mempool = new ConcurrentLinkedQueue<>();
-  private final int difficulty = 4;
+  private int difficulty = 4;
+
+  private int blocksProcessedCounter = 0;
+  private List<Long> avgMiningTimeMs = new ArrayList<Long>();
 
   public FullNodeService(BlockchainDatabase db) throws Exception {
     this.db = db;
@@ -130,6 +133,12 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
       System.out.println("📤 New block added in the Blockchain: " + getBlockByHash(newBlock.getHash()));
 
       propagateBlockToTrustedPeers(request);
+      blocksProcessedCounter += 1;
+      avgMiningTimeMs.add(request.getMiningTimeMs());
+
+      if (blocksProcessedCounter >= 100) {
+        increaseDifficulty();
+      }
 
       responseObserver.onNext(BlockValidationResponse.newBuilder()
             .setValid(true)
@@ -143,7 +152,7 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
   }
 
   public boolean isValidNewBlock(Block newBlock, Block lastBlock) {
-    String target = "0".repeat(newBlock.getDifficulty());
+    String target = "0".repeat(difficulty);
 
     if (newBlock.getHash().startsWith(target)
             && !newBlock.getPreviousHash().equals(lastBlock.getHash())
@@ -235,6 +244,28 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
         System.err.println("❌ Failed in propagate for peer: " + peer.getAddress() + ": " + e.getMessage());
       }
     }
+  }
+
+  private void increaseDifficulty() {
+    int avgTimeTarget = 210;
+    double avgTime = avgMiningTimeMs.stream()
+            .mapToInt(Long::intValue)
+            .average()
+            .orElse(0);
+
+    double activeNodes = List.of("localhost:9090").size();
+    double activeNodesTarget = 20;
+
+    double a = 1;
+    double b = 0.5;
+
+    var newComplexity = difficulty * Math.pow((avgTimeTarget/avgTime), a) * Math.pow((activeNodes/activeNodesTarget), b);
+
+    difficulty = Math.max(Math.toIntExact(Math.round(newComplexity)), 4);
+    System.out.println("New difficulty is: " + difficulty);
+
+    avgMiningTimeMs = new ArrayList<Long>();
+    blocksProcessedCounter = 0;
   }
 
   private boolean isMyself(String host, int port) {

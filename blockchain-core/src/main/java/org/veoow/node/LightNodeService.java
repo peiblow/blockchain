@@ -89,7 +89,7 @@ public class LightNodeService {
         Transaction tx = knowMemPool.get(0);
         Block block = new Block(previousHash, List.of(tx), difficulty);
         System.out.println("⛏️ Mining...");
-        block.mineBlock();
+        long miningTimeMs = block.mineBlock();
         System.out.println("✅ Block Mined: " + block.getHash());
 
         ManagedChannel channel = ManagedChannelBuilder
@@ -100,7 +100,7 @@ public class LightNodeService {
         BlockchainServiceGrpc.BlockchainServiceBlockingStub stub =
                 BlockchainServiceGrpc.newBlockingStub(channel);
 
-        org.veoow.grpc.Block grpcBlock = convertToGrpcBlock(block);
+        org.veoow.grpc.Block grpcBlock = convertToGrpcBlock(block, miningTimeMs);
         BlockValidationResponse response = stub.submitMinedBlock(grpcBlock);
 
         System.out.println("📤 Block sent to the FullNode → " + response.getMessage());
@@ -120,13 +120,14 @@ public class LightNodeService {
     }
   }
 
-  private org.veoow.grpc.Block convertToGrpcBlock(Block block) {
+  private org.veoow.grpc.Block convertToGrpcBlock(Block block, long miningTimeMs) {
     var grpcBlockBuilder = org.veoow.grpc.Block.newBuilder()
-          .setHash(block.getHash())
-          .setPreviousHash(block.getPreviousHash())
-          .setDifficulty(block.getDifficulty())
-          .setNonce(block.getNonce())
-          .setTimestamp(block.getTimestamp());
+            .setHash(block.getHash())
+            .setPreviousHash(block.getPreviousHash())
+            .setDifficulty(block.getDifficulty())
+            .setNonce(block.getNonce())
+            .setTimestamp(block.getTimestamp())
+            .setMiningTimeMs(miningTimeMs);
 
     for (Transaction tx : block.getTransactions()) {
       org.veoow.grpc.Transaction grpcTx = org.veoow.grpc.Transaction.newBuilder()
