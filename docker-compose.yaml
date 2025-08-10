@@ -24,6 +24,7 @@ services:
       - "9091:9090"
     depends_on:
       - bootstrap
+      - full-node-a
     networks:
       - blockchain-net
 

@@ -53,7 +53,7 @@ public class Main {
       System.out.println("FullNode gRPC server started on port 9090");
 
       ManagedChannel bootstrapChannel = ManagedChannelBuilder
-              .forAddress("localhost", 50051)
+              .forAddress("bootstrap", 50051)
               .usePlaintext()
               .build();
 
