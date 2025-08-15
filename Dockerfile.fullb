@@ -1,0 +1,8 @@
+# Dockerfile
+FROM eclipse-temurin:17-jdk-alpine
+
+WORKDIR /app
+
+COPY blockchain-core/target/blockchain-core-1.0-SNAPSHOT.jar full.jar
+
+CMD ["java", "-jar", "full.jar", "full", "full-node-b"]

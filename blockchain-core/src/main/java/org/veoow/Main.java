@@ -4,45 +4,54 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.protobuf.*;
+import lombok.extern.slf4j.Slf4j;
 import org.veoow.config.BlockchainDatabase;
 import org.veoow.grpc.*;
+import org.veoow.model.Transaction;
 import org.veoow.node.FullNodeService;
 import org.veoow.node.LightNodeService;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 public class Main {
   public static void main(String[] args) {
     if (args.length == 0) {
-      System.out.println("Pleas specify Light or Full node");
+      log.warn("Pleas specify Light or Full node");
       System.exit(1);
     }
 
     String nodeType = args[0].toLowerCase();
+    String hostPeer = args.length > 1 ?
+          args[1].toLowerCase()
+          : null;
 
     try {
       Files.createDirectories(Paths.get("data"));
     } catch (IOException e) {
-      throw new RuntimeException(e);
+      log.error("Error to create database folder: {}", e.getMessage());
     }
 
     switch (nodeType) {
-      case "full" -> runFullNode();
+      case "full" -> runFullNode(hostPeer);
       case "light" -> runLightNode();
       default -> {
-        System.out.println("Invalid node type, please use 'full' or 'light' ");
+        log.warn("Invalid node type, please use 'full' or 'light' ");
         System.exit(1);
       }
     }
   }
 
-  private static void runFullNode() {
+  private static void runFullNode(String hostPeer) {
     try (var db = new BlockchainDatabase("data/blockchain")) {
       FullNodeService fullNodeService = new FullNodeService(db);
       Server server = ServerBuilder.forPort(9090)
@@ -50,7 +59,7 @@ public class Main {
               .build();
 
       server.start();
-      System.out.println("FullNode gRPC server started on port 9090");
+      log.info("FullNode gRPC server started on port 9090");
 
       ManagedChannel bootstrapChannel = ManagedChannelBuilder
               .forAddress("bootstrap", 50051)
@@ -62,7 +71,7 @@ public class Main {
 
       NodeInfo nodeInfo = NodeInfo.newBuilder()
               .setId(UUID.randomUUID().toString())
-              .setAddress("localhost:9090")
+              .setAddress(hostPeer + ":9090")
               .build();
 
       bootstrapStub.registerNode(nodeInfo);
@@ -70,7 +79,7 @@ public class Main {
 
       server.awaitTermination();
     } catch (Exception e) {
-      e.printStackTrace();
+      log.error("Error to run fullNode: {}", e.getMessage());
     }
   }
 
@@ -79,7 +88,7 @@ public class Main {
       var lightNode = new LightNodeService();
 
       ManagedChannel bootstrapChannel = ManagedChannelBuilder
-              .forAddress("localhost", 50051)
+              .forAddress("bootstrap", 50051)
               .usePlaintext()
               .build();
 
@@ -90,7 +99,7 @@ public class Main {
       bootstrapChannel.shutdown();
 
       if (peerList.getPeersCount() == 0) {
-        System.out.println("No peer available for sync.");
+        log.info("No peer available for sync.");
         return;
       }
 
@@ -100,7 +109,7 @@ public class Main {
                       : peerList.getPeers(0);
 
       if (peer == null) {
-        System.out.println("No peer available for sync.");
+        log.info("No peer available for sync.");
         return;
       }
 
@@ -115,20 +124,20 @@ public class Main {
 
       BlockchainServiceGrpc.BlockchainServiceBlockingStub stub = BlockchainServiceGrpc.newBlockingStub(channel);
 
-      System.out.println("🔄 LightNode syncing with peer: " + peer.getId());
+      log.info("🔄 LightNode syncing with peer: {}", peer.getId());
 
       var response = stub.getBlockHeaders(Empty.newBuilder().build());
       var mempool = stub.getMempool(Empty.newBuilder().build());
 
       lightNode.syncHeadersFromGrpc(response);
-      lightNode.syncMemPool(mempool);
 
+      lightNode.syncMemPool(mempool);
       lightNode.mineMempool(host, port, 4);
 
       Thread.currentThread().join();
 
-    } catch (InterruptedException e) {
-      e.printStackTrace();
+    } catch (Exception e) {
+      log.error("Error to run lightNode: {}", e.getMessage());
     }
   }
 
@@ -156,7 +165,7 @@ public class Main {
         }
 
       } catch (Exception e) {
-        System.out.println("Peer indisponível: " + peer.getAddress());
+        log.error("Unavailable Peer: {}", peer.getAddress());
       }
     }
 

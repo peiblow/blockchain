@@ -49,6 +49,11 @@
                 <artifactId>protobuf-java</artifactId>
                 <version>${protobuf.version}</version>
             </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-services</artifactId>
+                <version>1.63.0</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

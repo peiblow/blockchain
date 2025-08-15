@@ -3,6 +3,7 @@ package org.veoow.node;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.veoow.grpc.*;
 import org.veoow.model.Block;
 import org.veoow.model.Transaction;
@@ -16,15 +17,11 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Getter
+@Slf4j
 public class LightNodeService {
 
   private List<BlockHeader> knownBlockHeaders;
   private List<Transaction> knowMemPool;
-
-  public void syncHeadersFromFullNode(List<BlockHeader> headers) {
-    this.knownBlockHeaders = headers;
-    System.out.println("🔄 Light Node sync headers.");
-  }
 
   public void syncMemPool(MempoolResponse grpcMemPool) {
     this.knowMemPool = grpcMemPool.getTransactionsList().stream()
@@ -40,9 +37,9 @@ public class LightNodeService {
               );
             }).collect(Collectors.toCollection(ArrayList::new));
 
-    System.out.println("🔄 Light Node sync mempool (via gRPC).");
+    log.info("🔄 Light Node sync mempool (via gRPC).");
     for (Transaction transaction : knowMemPool) {
-      System.out.println(transaction);
+      log.info(transaction.toString());
     }
   }
 
@@ -55,31 +52,31 @@ public class LightNodeService {
                     pbHeader.getNonce()
             ))
             .sorted(Comparator.comparingLong(BlockHeader::timestamp))
-            .collect(Collectors.toList());
+            .toList();
 
-    System.out.println("🔄 Light Node sync headers (via gRPC).");
+    log.info("🔄 Light Node sync headers (via gRPC).");
     printHeaders();
   }
 
   public void printHeaders() {
-    System.out.println("📦 Headers known for the Light Node:");
+    log.info("📦 Headers known for the Light Node:");
     if (knownBlockHeaders == null || knownBlockHeaders.isEmpty()) {
-      System.out.println("None header known.");
+      log.info("None header known.");
       return;
     }
     for (BlockHeader header : knownBlockHeaders) {
-      System.out.println(header);
+      log.info(header.toString());
     }
   }
 
   public void mineMempool(String fullNodeHost, int fullNodePort, int difficulty) {
     if (knowMemPool == null || knowMemPool.isEmpty()) {
-      System.out.println("⛔️ Mempool vazia. Nada para minerar.");
+      log.warn("⛔️ Mempool vazia. Nada para minerar.");
       return;
     }
 
     if (knownBlockHeaders == null || knownBlockHeaders.isEmpty()) {
-      System.out.println("⚠️ Nenhum header conhecido. Não é possível minerar.");
+      log.warn("⚠️ Nenhum header conhecido. Não é possível minerar.");
       return;
     }
 
@@ -88,9 +85,9 @@ public class LightNodeService {
         String previousHash = knownBlockHeaders.get(knownBlockHeaders.size() - 1).hash();
         Transaction tx = knowMemPool.get(0);
         Block block = new Block(previousHash, List.of(tx), difficulty);
-        System.out.println("⛏️ Mining...");
+        log.info("⛏️ Mining...");
         long miningTimeMs = block.mineBlock();
-        System.out.println("✅ Block Mined: " + block.getHash());
+        log.info("✅ Block Mined: {}", block.getHash());
 
         ManagedChannel channel = ManagedChannelBuilder
                 .forAddress(fullNodeHost, fullNodePort)
@@ -103,7 +100,7 @@ public class LightNodeService {
         org.veoow.grpc.Block grpcBlock = convertToGrpcBlock(block, miningTimeMs);
         BlockValidationResponse response = stub.submitMinedBlock(grpcBlock);
 
-        System.out.println("📤 Block sent to the FullNode → " + response.getMessage());
+        log.info("📤 Block sent to the FullNode → {}", response.getMessage());
 
         if (response.getValid()) {
           var blockHeaders = stub.getBlockHeaders(Empty.newBuilder().build());
@@ -116,7 +113,7 @@ public class LightNodeService {
         channel.shutdown();
       }
     } catch (Exception e) {
-      e.printStackTrace();
+      log.error("Error to mine blocks in MemPool: {}" , e.getMessage());
     }
   }
 

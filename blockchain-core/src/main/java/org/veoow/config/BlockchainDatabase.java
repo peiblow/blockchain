@@ -9,6 +9,7 @@ import org.rocksdb.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @RequiredArgsConstructor
@@ -46,7 +47,7 @@ public class BlockchainDatabase implements AutoCloseable {
     return objectMapper.readValue(data, Block.class);
   }
 
-  public List<BlockHeader> getAllBlockHeaders() throws Exception {
+  public List<BlockHeader> getAllBlockHeaders() {
     List<BlockHeader> headers = new ArrayList<>();
 
     try (var iterator = db.newIterator()) {
@@ -72,6 +73,80 @@ public class BlockchainDatabase implements AutoCloseable {
     }
 
     return headers;
+  }
+
+  public int getBlockchainSize() {
+    int count = 0;
+
+    try (var iterator = db.newIterator()) {
+      for (iterator.seekToFirst(); iterator.isValid(); iterator.next()) {
+        byte[] key = iterator.key();
+
+        String keyStr = new String(key, StandardCharsets.UTF_8);
+        if ("lastBlockHash".equals(keyStr)) {
+          continue;
+        }
+
+        try {
+          Block block = objectMapper.readValue(iterator.value(), Block.class);
+          if (block.getHash() != null && block.getPreviousHash() != null) {
+            count++;
+          }
+        } catch (Exception ignored) {}
+      }
+    }
+
+    return count;
+  }
+
+  public List<Block> getAllBlocks() throws Exception {
+    List<Block> blocks = new ArrayList<>();
+
+    try (var iterator = db.newIterator()) {
+      for (iterator.seekToFirst(); iterator.isValid(); iterator.next()) {
+        String key = new String(iterator.key(), StandardCharsets.UTF_8);
+        if ("lastBlockHash".equals(key)) {
+          continue;
+        }
+
+        try {
+          Block block = objectMapper.readValue(iterator.value(), Block.class);
+          if (block.getHash() != null && block.getPreviousHash() != null) {
+            blocks.add(block);
+          }
+        } catch (Exception e) {
+          System.err.println("Erro ao desserializar bloco: " + e.getMessage());
+        }
+      }
+    }
+
+    blocks.sort(Comparator.comparingLong(Block::getTimestamp));
+
+    return blocks;
+  }
+
+  public void replaceChain(List<Block> newChain) throws Exception {
+    if (newChain == null || newChain.isEmpty()) {
+      throw new IllegalArgumentException("A nova cadeia não pode ser vazia");
+    }
+
+    try (WriteBatch batch = new WriteBatch()) {
+      try (RocksIterator iterator = db.newIterator()) {
+        for (iterator.seekToFirst(); iterator.isValid(); iterator.next()) {
+          batch.delete(iterator.key());
+        }
+      }
+      db.write(new WriteOptions(), batch);
+    }
+
+    for (Block block : newChain) {
+      saveBlock(block);
+    }
+
+    Block lastBlock = newChain.get(newChain.size() - 1);
+    db.put("lastBlockHash".getBytes(), lastBlock.getHash().getBytes(StandardCharsets.UTF_8));
+
+    System.out.println("Blockchain substituída com sucesso. Novo tamanho: " + newChain.size());
   }
 
   public Block getLastBlock() throws Exception {

@@ -1,4 +1,14 @@
 services:
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.bootstrap
+    container_name: bootstrap-node
+    ports:
+      - "50051:50051"
+    networks:
+      - blockchain-net
+
   full-node-a:
     build:
       context: .
@@ -16,7 +26,7 @@ services:
   full-node-b:
     build:
       context: .
-      dockerfile: Dockerfile.full
+      dockerfile: Dockerfile.fullb
     container_name: full-node-b
     volumes:
       - fullnode_b_data:/data
@@ -28,13 +38,31 @@ services:
     networks:
       - blockchain-net
 
-  bootstrap:
+  light-node-a:
     build:
       context: .
-      dockerfile: Dockerfile.bootstrap
-    container_name: bootstrap-node
+      dockerfile: Dockerfile.light
+    container_name: light-node-a
     ports:
-      - "50051:50051"
+      - "8081:8081"
+    depends_on:
+      - bootstrap
+      - full-node-a
+      - full-node-b
+    networks:
+      - blockchain-net
+
+  light-node-b:
+    build:
+      context: .
+      dockerfile: Dockerfile.light
+    container_name: light-node-b
+    ports:
+      - "8082:8082"
+    depends_on:
+      - bootstrap
+      - full-node-a
+      - full-node-b
     networks:
       - blockchain-net
 
