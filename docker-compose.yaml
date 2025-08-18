@@ -66,6 +66,20 @@ services:
     networks:
       - blockchain-net
 
+  grpc-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.grpc
+    container_name: grpc-server
+    ports:
+      - "9595:9595"
+    depends_on:
+      - bootstrap
+      - full-node-a
+      - full-node-b
+    networks:
+      - blockchain-net
+
 volumes:
   fullnode_a_data:
   fullnode_b_data:

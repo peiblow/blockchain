@@ -109,7 +109,6 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
   @Override
   public void submitMinedBlock(org.veoow.grpc.Block request, StreamObserver<BlockValidationResponse> responseObserver) {
     try {
-      log.info("### NEW BLOCK RECEIVED!!");
       Block newBlock = convertFromGrpcBlock(request);
       Block lastBlock = db.getLastBlock();
       String sourcePeer = request.getPeerAddress();
@@ -265,7 +264,6 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
   }
 
   private boolean handleChainSelection(String peerAddress) {
-    log.info("### CHECKING CHAIN!!");
     int remoteChainLength = requestBlockchainLengthFromPeer(peerAddress);
     int localChainLength = db.getBlockchainSize();
 
@@ -344,7 +342,6 @@ public class FullNodeService extends BlockchainServiceGrpc.BlockchainServiceImpl
   }
 
   private void propagateBlockToTrustedPeers(Block block) {
-    log.info("## Propagation Started!! ##");
     ManagedChannel bootstrapChannel = ManagedChannelBuilder
           .forAddress("bootstrap", 50051)
           .usePlaintext()

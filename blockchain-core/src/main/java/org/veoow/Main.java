@@ -4,7 +4,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
-import io.grpc.protobuf.*;
 import lombok.extern.slf4j.Slf4j;
 import org.veoow.config.BlockchainDatabase;
 import org.veoow.grpc.*;
@@ -18,7 +17,6 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
